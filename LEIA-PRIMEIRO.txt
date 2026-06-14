@@ -1,0 +1,25 @@
+CORREÇÃO DO SITE NO GITHUB
+
+O problema ocorreu porque os arquivos foram enviados todos para a raiz,
+mas o index.html procurava pastas css, js e assets.
+
+Esta versão já está corrigida para usar:
+
+style.css
+config.js
+script.js
+logo.svg
+uefs-logo.png
+banner-estudantes.svg
+
+PASSOS:
+
+1. Abra o repositório no GitHub.
+2. Clique em Add file > Upload files.
+3. Envie todos os arquivos desta pasta.
+4. Marque para substituir os arquivos com o mesmo nome.
+5. Clique em Commit changes.
+6. Abra Actions e aguarde o Pages ficar verde.
+7. Abra o site e pressione Ctrl + F5.
+
+Não precisa criar pastas nesta versão.

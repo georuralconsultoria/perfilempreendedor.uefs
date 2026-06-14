@@ -1,0 +1,48 @@
+ATUALIZAÇÃO DO SITE — VERSÃO 2
+
+ALTERAÇÕES REALIZADAS
+- Campo Nome completo.
+- Campo Sexo: Masculino, Feminino, Outro ou Prefiro não dizer.
+- Campo Instituição de ensino com sugestões e possibilidade de digitação livre.
+- Campo Curso livre, com sugestões de cursos da UEFS.
+- Logo da UEFS movida para uma área discreta no rodapé.
+- Animação durante o envio e celebração de sucesso.
+- Créditos: Marciel Santos & Gabriel Arcanjo.
+- Integração atualizada para Google Planilhas e Supabase.
+
+1. ATUALIZAR O GITHUB
+Envie todos os arquivos desta pasta para a raiz do repositório e substitua os antigos.
+Aguarde o GitHub Pages ficar verde em Actions e pressione Ctrl + F5.
+
+2. ATUALIZAR O APPS SCRIPT
+Na planilha:
+Extensões > Apps Script
+
+Apague o código antigo e cole o conteúdo de:
+google-apps-script.gs
+
+Depois:
+Implantar > Gerenciar implantações > Editar (lápis)
+Versão > Nova versão
+Implantar
+
+Ao editar a implantação existente, a URL /exec pode continuar a mesma.
+
+3. ATUALIZAR O SUPABASE
+No SQL Editor do Supabase, execute uma vez:
+supabase-atualizacao-v2.sql
+
+Isso cria as colunas:
+nome
+sexo
+instituicao
+
+4. CONFERIR
+Faça um envio de teste e verifique:
+- Google Planilhas: novas colunas no final da aba Respostas.
+- Supabase: colunas nome, sexo e instituicao.
+
+OBSERVAÇÃO
+O campo de instituição é livre. A lista mostra sugestões de universidades
+estaduais e federais da Bahia, institutos federais e algumas instituições
+privadas, mas o participante pode digitar qualquer outra.
