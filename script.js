@@ -1,577 +1,99 @@
-// ===============================================
-// CONFIGURAÇÃO DE COLETA COM SUPABASE
-// Os dados ficam em config.js.
-// Use somente a Publishable key no navegador.
-// ===============================================
-const {
-  SUPABASE_URL = "",
-  SUPABASE_PUBLISHABLE_KEY = "",
-  GOOGLE_SHEETS_WEB_APP_URL = ""
-} = window.APP_CONFIG || {};
+(() => {
+  const modal = document.getElementById('survey-modal');
+  const form = document.getElementById('survey-form');
+  const steps = [...document.querySelectorAll('.form-step')];
+  const prev = document.getElementById('prev-button');
+  const next = document.getElementById('next-button');
+  const submit = document.getElementById('submit-button');
+  const status = document.getElementById('form-status');
+  const success = document.getElementById('success-screen');
+  const overlay = document.getElementById('sending-overlay');
+  const progressBar = document.getElementById('progress-bar');
+  const progressLabel = document.getElementById('progress-label');
+  const progressPercent = document.getElementById('progress-percent');
+  let current = 0;
 
-const SUPABASE_TABLE = "respostas_perfil_empreendedor";
+  const labels = ['Iniciativa','Criatividade','Planejamento','Comunicação','Liderança','Resiliência','Oportunidades','Decisão e riscos'];
+  const names = ['q_iniciativa','q_criatividade','q_planejamento','q_comunicacao','q_lideranca','q_resiliencia','q_oportunidades','q_riscos'];
 
-/* 1. ELEMENTOS DA PÁGINA */
-const modal = document.getElementById("survey-modal");
-const form = document.getElementById("survey-form");
-const successScreen = document.getElementById("success-screen");
-const formSteps = [...document.querySelectorAll(".form-step")];
-const nextButton = document.getElementById("next-button");
-const prevButton = document.getElementById("prev-button");
-const submitButton = document.getElementById("submit-button");
-const progressBar = document.getElementById("progress-bar");
-const progressLabel = document.getElementById("progress-label");
-const progressPercent = document.getElementById("progress-percent");
-const formStatus = document.getElementById("form-status");
-const sendingOverlay = document.getElementById("sending-overlay");
-const sendingTitle = document.getElementById("sending-title");
-const sendingMessage = document.getElementById("sending-message");
-const sendingProgressBar = document.getElementById("sending-progress-bar");
-const menuButton = document.querySelector(".menu-button");
-const nav = document.querySelector(".nav");
+  function openModal(){ modal?.classList.add('open'); modal?.setAttribute('aria-hidden','false'); document.body.style.overflow='hidden'; showStep(0); }
+  function closeModal(){ modal?.classList.remove('open'); modal?.setAttribute('aria-hidden','true'); document.body.style.overflow=''; }
+  document.querySelectorAll('[data-start]').forEach(b=>b.addEventListener('click',openModal));
+  document.querySelectorAll('[data-close]').forEach(b=>b.addEventListener('click',closeModal));
+  document.addEventListener('keydown',e=>{if(e.key==='Escape'&&modal?.classList.contains('open'))closeModal();});
 
-let currentStep = 1;
-const totalSteps = formSteps.length;
-let lastFocusedElement = null;
-let sendingTimer = null;
-
-/* 2. ANO E MENU MOBILE */
-// Atualiza automaticamente o ano.
-const year = new Date().getFullYear();
-document.getElementById("current-year").textContent = year;
-document.getElementById("copyright-year").textContent = year;
-
-// Menu móvel.
-menuButton.addEventListener("click", () => {
-  const open = nav.classList.toggle("open");
-  menuButton.setAttribute("aria-expanded", String(open));
-});
-
-nav.querySelectorAll("a, button").forEach((item) => {
-  item.addEventListener("click", () => {
-    nav.classList.remove("open");
-    menuButton.setAttribute("aria-expanded", "false");
-  });
-});
-
-/* 3. ABRIR E FECHAR QUESTIONÁRIO */
-// Abrir e fechar questionário.
-document.querySelectorAll("[data-start]").forEach((button) => {
-  button.addEventListener("click", openSurvey);
-});
-
-document.querySelectorAll("[data-close]").forEach((button) => {
-  button.addEventListener("click", closeSurvey);
-});
-
-document.addEventListener("keydown", (event) => {
-  if (event.key === "Escape" && modal.classList.contains("open")) {
-    closeSurvey();
-  }
-});
-
-function openSurvey() {
-  lastFocusedElement = document.activeElement;
-  modal.classList.add("open");
-  modal.setAttribute("aria-hidden", "false");
-  document.body.classList.add("modal-open");
-  updateStep();
-  modal.querySelector(".close-button").focus();
-}
-
-function closeSurvey() {
-  modal.classList.remove("open");
-  modal.setAttribute("aria-hidden", "true");
-  document.body.classList.remove("modal-open");
-  if (lastFocusedElement) lastFocusedElement.focus();
-}
-
-document.getElementById("finish-button").addEventListener("click", () => {
-  closeSurvey();
-  resetSurvey();
-});
-
-/* 4. NAVEGAÇÃO ENTRE ETAPAS */
-// Navegação entre etapas.
-nextButton.addEventListener("click", () => {
-  if (!validateStep(currentStep)) return;
-
-  if (currentStep < totalSteps) {
-    currentStep += 1;
-    updateStep();
-  }
-});
-
-prevButton.addEventListener("click", () => {
-  if (currentStep > 1) {
-    currentStep -= 1;
-    updateStep();
-  }
-});
-
-function updateStep() {
-  formSteps.forEach((step, index) => {
-    step.classList.toggle("active", index === currentStep - 1);
-  });
-
-  const percent = Math.round((currentStep / totalSteps) * 100);
-  progressBar.style.width = `${percent}%`;
-  progressLabel.textContent = `Etapa ${currentStep} de ${totalSteps}`;
-  progressPercent.textContent = `${percent}%`;
-
-  prevButton.disabled = currentStep === 1;
-  nextButton.hidden = currentStep === totalSteps;
-  submitButton.hidden = currentStep !== totalSteps;
-
-  const panel = document.querySelector(".survey-panel");
-  panel.scrollTo({ top: 0, behavior: "smooth" });
-
-  const legend = formSteps[currentStep - 1].querySelector("legend");
-  if (legend) legend.setAttribute("tabindex", "-1");
-}
-
-/* 5. VALIDAÇÃO DOS CAMPOS */
-function validateStep(stepNumber) {
-  const step = formSteps[stepNumber - 1];
-  const requiredFields = [...step.querySelectorAll("[required]")];
-  const validatedNames = new Set();
-  let valid = true;
-  let firstInvalid = null;
-
-  clearStepErrors(step);
-
-  requiredFields.forEach((field) => {
-    const name = field.name;
-
-    // Grupos de radio devem ser avaliados apenas uma vez.
-    if (field.type === "radio") {
-      if (validatedNames.has(name)) return;
-      validatedNames.add(name);
-
-      const checked = step.querySelector(`input[name="${CSS.escape(name)}"]:checked`);
-      if (!checked) {
-        valid = false;
-        showError(name, "Selecione uma opção.");
-        firstInvalid ||= field;
-      }
-      return;
-    }
-
-    if (field.type === "checkbox" && !field.checked) {
-      valid = false;
-      showError(name, "É necessário confirmar para continuar.");
-      firstInvalid ||= field;
-      return;
-    }
-
-    if (!field.value.trim()) {
-      valid = false;
-      showError(name, "Preencha este campo.");
-      field.setAttribute("aria-invalid", "true");
-      firstInvalid ||= field;
-    }
-  });
-
-  if (!valid && firstInvalid) {
-    firstInvalid.focus();
-    formStatus.textContent = "Revise os campos destacados antes de continuar.";
-  } else {
-    formStatus.textContent = "";
-  }
-
-  return valid;
-}
-
-function showError(name, message) {
-  const error = document.querySelector(`[data-error-for="${CSS.escape(name)}"]`);
-  if (error) error.textContent = message;
-}
-
-function clearStepErrors(step) {
-  step.querySelectorAll(".field-error").forEach((el) => (el.textContent = ""));
-  step.querySelectorAll("[aria-invalid='true']").forEach((el) => el.removeAttribute("aria-invalid"));
-}
-
-/* 6. CONTROLES DO FORMULÁRIO */
-// Atualização do controle de interesse.
-const interestRange = document.getElementById("interesse_negocio");
-const interestOutput = document.getElementById("range-output");
-interestRange.addEventListener("input", () => {
-  interestOutput.value = interestRange.value;
-  interestOutput.textContent = interestRange.value;
-});
-
-// Contadores de caracteres.
-document.querySelectorAll("textarea[maxlength]").forEach((textarea) => {
-  const counter = document.querySelector(`[data-counter-for="${textarea.id}"]`);
-  const updateCounter = () => {
-    if (counter) counter.textContent = `${textarea.value.length}/${textarea.maxLength}`;
-  };
-  textarea.addEventListener("input", updateCounter);
-  updateCounter();
-});
-
-/* 7. ENVIO DAS RESPOSTAS */
-// Envio.
-form.addEventListener("submit", async (event) => {
-  event.preventDefault();
-
-  if (!validateStep(currentStep)) return;
-
-  const submitOriginalText = submitButton.textContent;
-  submitButton.disabled = true;
-  submitButton.textContent = "Enviando...";
-  formStatus.textContent = "";
-  const sendingStartedAt = Date.now();
-  startSendingAnimation();
-
-  const formData = new FormData(form);
-  const payload = Object.fromEntries(formData.entries());
-
-  payload.data_envio = new Date().toISOString();
-  payload.identificador = createAnonymousId();
-  payload.indice_empreendedor = calculateScore(payload);
-
-  try {
-    const destinations = [];
-
-    if (isSupabaseConfigured()) {
-      destinations.push({
-        name: "Supabase",
-        request: sendToSupabase(payload)
-      });
-    }
-
-    if (isGoogleSheetsConfigured()) {
-      destinations.push({
-        name: "Google Planilhas",
-        request: sendToGoogleSheets(payload)
-      });
-    }
-
-    if (destinations.length === 0) {
-      saveLocally(payload);
-      formStatus.textContent =
-        "Modo demonstração: configure o Supabase ou o Google Planilhas.";
-      await delay(1200);
-      stopSendingAnimation();
-      showResult(payload.indice_empreendedor);
-      return;
-    }
-
-    const results = await Promise.allSettled(
-      destinations.map((destination) => destination.request)
-    );
-
-    const successful = [];
-    const failed = [];
-
-    results.forEach((result, index) => {
-      const name = destinations[index].name;
-
-      if (result.status === "fulfilled") {
-        successful.push(name);
-      } else {
-        failed.push(name);
-        console.error(`Falha no envio para ${name}:`, result.reason);
-      }
+  function clearErrors(step){ step.querySelectorAll('.field-error').forEach(e=>e.textContent=''); status.textContent=''; }
+  function validateStep(step){
+    clearErrors(step);
+    let ok=true;
+    const required = [...step.querySelectorAll('input[required],select[required],textarea[required]')];
+    const groups = new Set();
+    required.forEach(el=>{
+      if(el.type==='radio'){groups.add(el.name);return;}
+      if(!el.checkValidity()) ok=false;
     });
-
-    if (successful.length === 0) {
-      throw new Error("Nenhum destino recebeu a resposta.");
+    groups.forEach(name=>{
+      if(!step.querySelector(`input[name="${name}"]:checked`)){ok=false;const err=step.querySelector(`[data-error-for="${name}"]`);if(err)err.textContent='Selecione uma opção.';}
+    });
+    if(!ok){
+      required.find(el=>!el.checkValidity())?.reportValidity();
+      if(!step.querySelector('.field-error:not(:empty)')) status.textContent='Preencha os campos obrigatórios para continuar.';
     }
-
-    const minimumAnimationTime = 1700;
-    const elapsed = Date.now() - sendingStartedAt;
-    if (elapsed < minimumAnimationTime) {
-      await delay(minimumAnimationTime - elapsed);
-    }
-
-    stopSendingAnimation();
-
-    if (failed.length > 0) {
-      formStatus.textContent =
-        `Resposta salva em ${successful.join(" e ")}. Falha em: ${failed.join(" e ")}.`;
-    } else {
-      formStatus.textContent =
-        `Resposta enviada com sucesso para ${successful.join(" e ")}.`;
-    }
-
-    showResult(payload.indice_empreendedor);
-  } catch (error) {
-    stopSendingAnimation();
-    console.error(error);
-    formStatus.textContent =
-      "Não foi possível enviar. Verifique a configuração do Supabase e da planilha.";
-    submitButton.disabled = false;
-    submitButton.textContent = submitOriginalText;
+    return ok;
   }
-});
-
-function isSupabaseConfigured() {
-  return (
-    SUPABASE_URL.startsWith("https://") &&
-    !SUPABASE_URL.includes("COLE_A_") &&
-    SUPABASE_PUBLISHABLE_KEY.length > 20 &&
-    !SUPABASE_PUBLISHABLE_KEY.includes("COLE_A_")
-  );
-}
-
-function isGoogleSheetsConfigured() {
-  return (
-    GOOGLE_SHEETS_WEB_APP_URL.startsWith("https://script.google.com/") &&
-    GOOGLE_SHEETS_WEB_APP_URL.endsWith("/exec") &&
-    !GOOGLE_SHEETS_WEB_APP_URL.includes("COLE_A_")
-  );
-}
-
-/* 8. CONEXÃO COM O SUPABASE */
-async function sendToSupabase(payload) {
-  const projectUrl = SUPABASE_URL.replace(/\/+$/, "");
-  const endpoint = `${projectUrl}/rest/v1/${SUPABASE_TABLE}`;
-  const record = mapPayloadToDatabase(payload);
-
-  const headers = {
-    apikey: SUPABASE_PUBLISHABLE_KEY,
-    "Content-Type": "application/json",
-    Prefer: "return=minimal"
-  };
-
-  // Compatibilidade com a chave anon antiga. As novas Publishable keys
-  // devem ser enviadas pelo cabeçalho apikey, sem Bearer.
-  if (!SUPABASE_PUBLISHABLE_KEY.startsWith("sb_publishable_")) {
-    headers.Authorization = `Bearer ${SUPABASE_PUBLISHABLE_KEY}`;
+  function showStep(i){
+    current=Math.max(0,Math.min(i,steps.length-1));
+    steps.forEach((s,n)=>s.classList.toggle('active',n===current));
+    const pct=Math.round(((current+1)/steps.length)*100);
+    if(progressBar)progressBar.style.width=pct+'%';
+    if(progressLabel)progressLabel.textContent=`Etapa ${current+1} de ${steps.length}`;
+    if(progressPercent)progressPercent.textContent=pct+'%';
+    if(prev)prev.disabled=current===0;
+    const last=current===steps.length-1;
+    if(next){next.hidden=last;next.style.display=last?'none':'';}
+    if(submit){submit.hidden=!last;submit.style.display=last?'inline-flex':'none';}
+    document.querySelector('.survey-panel')?.scrollTo({top:0,behavior:'smooth'});
   }
+  next?.addEventListener('click',()=>{if(validateStep(steps[current]))showStep(current+1);});
+  prev?.addEventListener('click',()=>showStep(current-1));
 
-  const response = await fetch(endpoint, {
-    method: "POST",
-    headers,
-    body: JSON.stringify(record)
+  document.querySelectorAll('[data-counter-for]').forEach(c=>{
+    const id=c.dataset.counterFor, el=document.getElementById(id); if(!el)return;
+    const update=()=>c.textContent=`${el.value.length}/${el.maxLength}`; el.addEventListener('input',update);update();
   });
 
-  if (!response.ok) {
-    const details = await response.text();
-    throw new Error(`Supabase ${response.status}: ${details}`);
+  function scoreValues(){return names.map(n=>Number(form.querySelector(`input[name="${n}"]:checked`)?.value||0));}
+  function radarSvg(values){
+    const w=620,h=420,cx=310,cy=205,r=145,N=values.length;
+    const point=(radius,i,val=0)=>{const a=-Math.PI/2+(i*2*Math.PI/N);const rr=radius*val;return [cx+Math.cos(a)*rr,cy+Math.sin(a)*rr]};
+    const pts=v=>v.map((x,i)=>point(r,i,x/5).join(',')).join(' ');
+    let grid='';
+    for(let level=1;level<=5;level++){const p=Array.from({length:N},(_,i)=>point(r*level/5,i).join(',')).join(' ');grid+=`<polygon points="${p}" fill="none" stroke="#cbd8e5" stroke-width="1"/>`;}
+    for(let i=0;i<N;i++){const [x,y]=point(r,i,1);const [tx,ty]=point(r+28,i,1);grid+=`<line x1="${cx}" y1="${cy}" x2="${x}" y2="${y}" stroke="#dce5ef"/><text x="${tx}" y="${ty}" text-anchor="middle" dominant-baseline="middle" font-size="12" font-weight="700" fill="#40516a">${labels[i]}</text>`;}
+    return `<svg viewBox="0 0 ${w} ${h}" role="img" aria-label="Gráfico de teia das competências empreendedoras" style="width:100%;height:100%;font-family:Inter,Arial,sans-serif">${grid}<polygon points="${pts(values)}" fill="rgba(21,101,192,.18)" stroke="#1565c0" stroke-width="3"/>${values.map((v,i)=>{const [x,y]=point(r,i,v/5);return `<circle cx="${x}" cy="${y}" r="5" fill="#f59e0b" stroke="#fff" stroke-width="2"/>`;}).join('')}<circle cx="${cx}" cy="${cy}" r="3" fill="#1565c0"/></svg>`;
   }
-}
-
-/* 9. ENVIO PARA O GOOGLE PLANILHAS */
-async function sendToGoogleSheets(payload) {
-  /*
-   * O modo no-cors permite o envio do GitHub Pages ao Apps Script.
-   * O Apps Script registra a resposta e evita duplicações pelo identificador.
-   */
-  await fetch(GOOGLE_SHEETS_WEB_APP_URL, {
-    method: "POST",
-    mode: "no-cors",
-    headers: {
-      "Content-Type": "text/plain;charset=utf-8"
-    },
-    body: JSON.stringify(payload)
-  });
-}
-
-function mapPayloadToDatabase(payload) {
-  const numberFields = [
-    "interesse_negocio",
-    "q_iniciativa",
-    "q_criatividade",
-    "q_planejamento",
-    "q_comunicacao",
-    "q_lideranca",
-    "q_resiliencia",
-    "q_oportunidades",
-    "q_riscos",
-    "indice_empreendedor"
-  ];
-
-  const record = {
-    identificador: String(payload.identificador || ""),
-    consentimento: payload.consentimento === "Sim",
-    nome: String(payload.nome || "").trim(),
-    sexo: String(payload.sexo || "").trim(),
-    instituicao: String(payload.instituicao || "").trim(),
-    idade: String(payload.idade || "").trim(),
-    curso: String(payload.curso || "").trim(),
-    semestre: String(payload.semestre || "").trim(),
-    turno: String(payload.turno || "").trim(),
-    area_interesse: String(payload.area_interesse || "").trim(),
-    experiencia_empreendedora: String(
-      payload.experiencia_empreendedora || ""
-    ).trim(),
-    tipo_projeto: String(payload.tipo_projeto || "").trim(),
-    habilidades: String(payload.habilidades || "").trim(),
-    ideia_projeto: String(payload.ideia_projeto || "").trim() || null,
-    apoio: String(payload.apoio || "").trim(),
-    autoriza_uso_agregado: payload.autoriza_uso_agregado === "Sim"
-  };
-
-  numberFields.forEach((field) => {
-    record[field] = Number(payload[field]);
+  function renderResult(){
+    const values=scoreValues(); const avg=values.reduce((a,b)=>a+b,0)/values.length; const pct=Math.round(avg/5*100);
+    const canvas=document.getElementById('strength-radar');
+    if(canvas){canvas.outerHTML=`<div id="strength-radar" aria-label="Gráfico de teia das competências empreendedoras">${radarSvg(values)}</div>`;}
+    const list=document.getElementById('strength-list');
+    if(list){list.innerHTML=labels.map((l,i)=>`<div class="strength-item"><strong>${l}</strong><span>${values[i]}/5</span></div>`).join('');}
+    const score=document.getElementById('profile-score'), bar=document.getElementById('score-bar'), title=document.getElementById('profile-title'), desc=document.getElementById('profile-description');
+    if(score)score.textContent=pct+'%'; if(bar)bar.style.width=pct+'%';
+    if(avg>=4){title.textContent='Perfil com competências bem desenvolvidas';desc.textContent='Suas respostas indicam níveis elevados nas competências avaliadas.';}
+    else if(avg>=3){title.textContent='Perfil em desenvolvimento';desc.textContent='Suas respostas mostram competências presentes, com espaço para desenvolvimento.';}
+    else{title.textContent='Perfil em construção';desc.textContent='O resultado indica competências que podem ser trabalhadas e fortalecidas ao longo da sua formação.';}
+  }
+  form?.addEventListener('submit',e=>{
+    e.preventDefault();
+    if(!validateStep(steps[current]))return;
+    overlay.hidden=false;
+    const bar=document.getElementById('sending-progress-bar');let p=0;
+    const timer=setInterval(()=>{p=Math.min(100,p+8);if(bar)bar.style.width=p+'%';if(p>=100){clearInterval(timer);overlay.hidden=true;form.hidden=true;document.querySelector('.progress-wrap').hidden=true;success.hidden=false;renderResult();}},45);
   });
 
-  return record;
-}
-
-
-function delay(milliseconds) {
-  return new Promise((resolve) => setTimeout(resolve, milliseconds));
-}
-
-function startSendingAnimation() {
-  const stages = [
-    {
-      title: "Organizando suas respostas...",
-      message: "Estamos preparando os dados para um envio seguro.",
-      progress: 28
-    },
-    {
-      title: "Enviando com segurança...",
-      message: "Conectando o questionário aos serviços de armazenamento.",
-      progress: 64
-    },
-    {
-      title: "Finalizando o registro...",
-      message: "Só mais um instante para concluir sua participação.",
-      progress: 91
-    }
-  ];
-
-  let stage = 0;
-  sendingOverlay.hidden = false;
-  sendingTitle.textContent = stages[0].title;
-  sendingMessage.textContent = stages[0].message;
-  sendingProgressBar.style.width = `${stages[0].progress}%`;
-
-  clearInterval(sendingTimer);
-  sendingTimer = setInterval(() => {
-    stage = Math.min(stage + 1, stages.length - 1);
-    sendingTitle.textContent = stages[stage].title;
-    sendingMessage.textContent = stages[stage].message;
-    sendingProgressBar.style.width = `${stages[stage].progress}%`;
-
-    if (stage === stages.length - 1) {
-      clearInterval(sendingTimer);
-      sendingTimer = null;
-    }
-  }, 560);
-}
-
-function stopSendingAnimation() {
-  clearInterval(sendingTimer);
-  sendingTimer = null;
-
-  if (sendingProgressBar) {
-    sendingProgressBar.style.width = "100%";
-  }
-
-  if (sendingOverlay) {
-    sendingOverlay.hidden = true;
-  }
-}
-
-function saveLocally(payload) {
-  const key = "respostas_perfil_empreendedor";
-  const current = JSON.parse(localStorage.getItem(key) || "[]");
-  current.push(payload);
-  localStorage.setItem(key, JSON.stringify(current));
-}
-
-function createAnonymousId() {
-  if (crypto && crypto.randomUUID) return crypto.randomUUID();
-  return `resp-${Date.now()}-${Math.random().toString(16).slice(2)}`;
-}
-
-/* 10. CÁLCULO DO RESULTADO */
-function calculateScore(payload) {
-  const keys = [
-    "q_iniciativa",
-    "q_criatividade",
-    "q_planejamento",
-    "q_comunicacao",
-    "q_lideranca",
-    "q_resiliencia",
-    "q_oportunidades",
-    "q_riscos"
-  ];
-
-  const values = keys.map((key) => Number(payload[key] || 0));
-  const total = values.reduce((sum, value) => sum + value, 0);
-  const maximum = keys.length * 5;
-  return Math.round((total / maximum) * 100);
-}
-
-/* 11. TELA DE RESULTADO */
-function showResult(score) {
-  form.hidden = true;
-  document.querySelector(".progress-wrap").hidden = true;
-  successScreen.hidden = false;
-  successScreen.classList.remove("celebrate");
-  requestAnimationFrame(() => successScreen.classList.add("celebrate"));
-
-  const title = document.getElementById("profile-title");
-  const description = document.getElementById("profile-description");
-  const scoreText = document.getElementById("profile-score");
-  const scoreBar = document.getElementById("score-bar");
-
-  let profile;
-
-  if (score >= 85) {
-    profile = {
-      title: "Perfil empreendedor protagonista",
-      description:
-        "Você demonstra forte iniciativa, visão de oportunidades, organização e capacidade de mobilizar pessoas. Continue transformando ideias em experiências práticas."
-    };
-  } else if (score >= 70) {
-    profile = {
-      title: "Perfil empreendedor em expansão",
-      description:
-        "Você apresenta competências empreendedoras consistentes e bom potencial para liderar projetos. Experiências práticas podem fortalecer ainda mais seu desenvolvimento."
-    };
-  } else if (score >= 50) {
-    profile = {
-      title: "Perfil empreendedor em desenvolvimento",
-      description:
-        "Você já possui habilidades importantes e pode ampliá-las com planejamento, participação em projetos, colaboração e contato com novas oportunidades."
-    };
-  } else {
-    profile = {
-      title: "Perfil explorador de possibilidades",
-      description:
-        "Seu caminho empreendedor está começando. Oficinas, projetos em equipe e pequenos desafios práticos podem ajudar você a reconhecer e desenvolver seus pontos fortes."
-    };
-  }
-
-  title.textContent = profile.title;
-  description.textContent = profile.description;
-  scoreText.textContent = `${score}%`;
-
-  requestAnimationFrame(() => {
-    scoreBar.style.width = `${score}%`;
-  });
-
-  document.querySelector(".survey-panel").scrollTo({ top: 0, behavior: "smooth" });
-}
-
-/* 12. REINICIAR QUESTIONÁRIO */
-function resetSurvey() {
-  form.reset();
-  form.hidden = false;
-  successScreen.hidden = true;
-  successScreen.classList.remove("celebrate");
-  stopSendingAnimation();
-  document.querySelector(".progress-wrap").hidden = false;
-  currentStep = 1;
-  interestOutput.textContent = "3";
-  interestOutput.value = "3";
-  document.querySelectorAll(".field-error").forEach((el) => (el.textContent = ""));
-  document.querySelectorAll("textarea[maxlength]").forEach((textarea) => {
-    const counter = document.querySelector(`[data-counter-for="${textarea.id}"]`);
-    if (counter) counter.textContent = `0/${textarea.maxLength}`;
-  });
-  submitButton.disabled = false;
-  submitButton.textContent = "Enviar respostas";
-  formStatus.textContent = "";
-  document.getElementById("score-bar").style.width = "0";
-  updateStep();
-}
+  document.querySelectorAll('.menu-button').forEach(btn=>btn.addEventListener('click',()=>{
+    const nav=document.querySelector('.nav'); if(!nav)return; const open=nav.style.display==='flex'; nav.style.display=open?'':'flex'; btn.setAttribute('aria-expanded',String(!open));
+  }));
+  showStep(0);
+})();

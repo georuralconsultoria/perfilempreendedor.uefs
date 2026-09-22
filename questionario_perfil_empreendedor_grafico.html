@@ -9,9 +9,9 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Manrope:wght@700;800&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="style.css">
   <link rel="icon" type="image/jpeg" href="logo-perfil-empreendedor.jpeg">
   <link rel="apple-touch-icon" href="logo-perfil-empreendedor.jpeg">
+  <link rel="stylesheet" href="style.css">
   <style>
     /* Logos do projeto */
     .project-logo { width: 58px; height: 58px; object-fit: contain; object-position: center; border-radius: 10px; background: #fff; }
@@ -57,7 +57,6 @@
     .strength-item strong { display: block; }
     .strength-item span { color: #64748b; font-size: .9rem; }
   </style>
-  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 </head>
 <body>
   <a class="skip-link" href="#conteudo">Pular para o conteúdo</a>
@@ -869,140 +868,7 @@
     </section>
   </div>
 
-  <script src="config.js"></script>
   <script src="script.js"></script>
 
-  <script>
-  (() => {
-    const form = document.getElementById('survey-form');
-    const steps = [...document.querySelectorAll('.form-step')];
-    const nextButton = document.getElementById('next-button');
-    const submitButton = document.getElementById('submit-button');
-    const successScreen = document.getElementById('success-screen');
-
-    // Garante que "Enviar respostas" fique disponível somente na etapa 5.
-    function enforceLastStepButton() {
-      const active = document.querySelector('.form-step.active');
-      const isLast = active && active.dataset.step === String(steps.length);
-      if (submitButton) {
-        submitButton.hidden = !isLast;
-        submitButton.style.display = isLast ? '' : 'none';
-      }
-      if (nextButton) {
-        nextButton.hidden = isLast;
-        nextButton.style.display = isLast ? 'none' : '';
-      }
-    }
-
-    const observer = new MutationObserver(enforceLastStepButton);
-    steps.forEach(step => observer.observe(step, {attributes: true, attributeFilter: ['class']}));
-
-    // Também acompanha mudanças de estado feitas pelo script principal.
-    setInterval(enforceLastStepButton, 250);
-    enforceLastStepButton();
-
-    let radarChart = null;
-
-    function getScore(name) {
-      const checked = form?.querySelector(`input[name="${name}"]:checked`);
-      return checked ? Number(checked.value) : 0;
-    }
-
-    function renderRadar() {
-      const canvas = document.getElementById('strength-radar');
-      if (!canvas || typeof Chart === 'undefined') return;
-
-      const labels = [
-        'Iniciativa',
-        'Criatividade',
-        'Planejamento',
-        'Comunicação',
-        'Liderança',
-        'Resiliência',
-        'Oportunidades',
-        'Decisão e riscos'
-      ];
-
-      const names = [
-        'q_iniciativa',
-        'q_criatividade',
-        'q_planejamento',
-        'q_comunicacao',
-        'q_lideranca',
-        'q_resiliencia',
-        'q_oportunidades',
-        'q_riscos'
-      ];
-
-      const values = names.map(getScore);
-
-      if (radarChart) radarChart.destroy();
-
-      radarChart = new Chart(canvas.getContext('2d'), {
-        type: 'radar',
-        data: {
-          labels,
-          datasets: [{
-            label: 'Seu perfil',
-            data: values,
-            fill: true,
-            borderWidth: 2,
-            pointRadius: 4
-          }]
-        },
-        options: {
-          responsive: true,
-          maintainAspectRatio: false,
-          scales: {
-            r: {
-              min: 0,
-              max: 5,
-              ticks: { stepSize: 1, showLabelBackdrop: false },
-              beginAtZero: true
-            }
-          },
-          plugins: {
-            legend: { display: true }
-          }
-        }
-      });
-
-      const ranked = labels
-        .map((label, i) => ({label, value: values[i]}))
-        .sort((a, b) => b.value - a.value);
-
-      const list = document.getElementById('strength-list');
-      if (list) {
-        list.innerHTML = ranked.map(item => `
-          <div class="strength-item">
-            <strong>${item.label}</strong>
-            <span>${item.value}/5</span>
-          </div>
-        `).join('');
-      }
-    }
-
-    // Quando a tela de sucesso aparecer após o envio, cria o gráfico.
-    const successObserver = new MutationObserver(() => {
-      if (successScreen && !successScreen.hidden) {
-        setTimeout(renderRadar, 100);
-      }
-    });
-
-    if (successScreen) {
-      successObserver.observe(successScreen, {
-        attributes: true,
-        attributeFilter: ['hidden', 'class']
-      });
-    }
-
-    // Fallback: se o script principal substituir o conteúdo após o envio.
-    form?.addEventListener('submit', () => {
-      setTimeout(() => {
-        if (successScreen && !successScreen.hidden) renderRadar();
-      }, 1200);
-    });
-  })();
-  </script>
 </body>
 </html>
